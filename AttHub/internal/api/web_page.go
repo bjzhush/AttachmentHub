@@ -147,6 +147,11 @@ const webAppHTML = `<!doctype html>
       resize: vertical;
       font-family: inherit;
     }
+    input::placeholder,
+    textarea::placeholder {
+      color: #b7c6d8;
+      opacity: 1;
+    }
     .field-label {
       font-size: 11px;
       color: var(--muted);
@@ -443,11 +448,6 @@ const webAppHTML = `<!doctype html>
       line-height: 1.45;
       white-space: normal;
       word-break: break-word;
-    }
-    #edit-url::placeholder,
-    #edit-note::placeholder {
-      color: #9fb0c4;
-      opacity: 1;
     }
     .modal-actions {
       display: flex;
