@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
@@ -91,6 +92,14 @@ func (h *Handler) importAttachment(w http.ResponseWriter, r *http.Request) {
 
 	url := optionalFromForm(r.FormValue("url"))
 	note := optionalFromForm(r.FormValue("note"))
+	if url == nil && isHTMLFilename(header.Filename) {
+		detectedURL, detectErr := detectURLFromHTMLHeader(file, 4)
+		if detectErr != nil {
+			h.logger.Warn("detect url from html header failed", "filename", header.Filename, "error", detectErr)
+		} else if detectedURL != nil {
+			url = detectedURL
+		}
+	}
 
 	created, err := h.service.Import(r.Context(), attachment.ImportInput{
 		FileReader: file,
@@ -349,6 +358,85 @@ func optionalFromForm(raw string) *string {
 		return nil
 	}
 	return &value
+}
+
+func isHTMLFilename(filename string) bool {
+	lower := strings.ToLower(strings.TrimSpace(filename))
+	return strings.HasSuffix(lower, ".html") || strings.HasSuffix(lower, ".htm")
+}
+
+func detectURLFromHTMLHeader(file multipart.File, maxLines int) (*string, error) {
+	if maxLines <= 0 {
+		maxLines = 4
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek upload file start: %w", err)
+	}
+	defer func() {
+		_, _ = file.Seek(0, io.SeekStart)
+	}()
+
+	const maxReadBytes = 256 * 1024
+
+	var snippet bytes.Buffer
+	buf := make([]byte, 4096)
+	lineBreaks := 0
+
+	for snippet.Len() < maxReadBytes && lineBreaks < maxLines {
+		n, err := file.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			_, _ = snippet.Write(chunk)
+			lineBreaks += bytes.Count(chunk, []byte{'\n'})
+		}
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read upload file header: %w", err)
+		}
+	}
+
+	return parseSingleFileURLSnippet(snippet.String(), maxLines), nil
+}
+
+func parseSingleFileURLSnippet(snippet string, maxLines int) *string {
+	if maxLines <= 0 {
+		maxLines = 4
+	}
+
+	lines := strings.Split(snippet, "\n")
+	limit := maxLines
+	if len(lines) < limit {
+		limit = len(lines)
+	}
+
+	for i := 0; i < limit; i++ {
+		line := strings.TrimSpace(strings.TrimSuffix(lines[i], "\r"))
+		if line == "" {
+			continue
+		}
+
+		lower := strings.ToLower(line)
+		switch {
+		case strings.HasPrefix(lower, "url:"):
+			value := strings.TrimSpace(line[len("url:"):])
+			if value == "" {
+				continue
+			}
+			return &value
+		case strings.HasPrefix(lower, "url："):
+			value := strings.TrimSpace(line[len("url："):])
+			if value == "" {
+				continue
+			}
+			return &value
+		}
+	}
+
+	return nil
 }
 
 func resolveInlineContentType(fileExt string, detected string) string {
