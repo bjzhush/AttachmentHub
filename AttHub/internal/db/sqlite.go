@@ -63,6 +63,10 @@ func OpenSQLite(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate public id: %w", err)
 	}
+	if err := migrateAttachmentTimestamps(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate attachment timestamps: %w", err)
+	}
 
 	return db, nil
 }
@@ -177,6 +181,43 @@ func migratePublicID(db *sql.DB) error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit public id migration: %w", err)
+	}
+
+	return nil
+}
+
+func migrateAttachmentTimestamps(db *sql.DB) error {
+	hasCreatedAt, err := hasAttachmentColumn(db, "created_at")
+	if err != nil {
+		return err
+	}
+	hasUpdatedAt, err := hasAttachmentColumn(db, "updated_at")
+	if err != nil {
+		return err
+	}
+
+	if !hasCreatedAt {
+		if _, err := db.Exec("ALTER TABLE attachments ADD COLUMN created_at INTEGER"); err != nil {
+			return fmt.Errorf("add created_at column: %w", err)
+		}
+	}
+	if !hasUpdatedAt {
+		if _, err := db.Exec("ALTER TABLE attachments ADD COLUMN updated_at INTEGER"); err != nil {
+			return fmt.Errorf("add updated_at column: %w", err)
+		}
+	}
+
+	if _, err := db.Exec(`
+		UPDATE attachments
+		SET created_at = unixepoch()
+		WHERE created_at IS NULL OR created_at <= 0`); err != nil {
+		return fmt.Errorf("backfill created_at: %w", err)
+	}
+	if _, err := db.Exec(`
+		UPDATE attachments
+		SET updated_at = created_at
+		WHERE updated_at IS NULL OR updated_at <= 0`); err != nil {
+		return fmt.Errorf("backfill updated_at: %w", err)
 	}
 
 	return nil

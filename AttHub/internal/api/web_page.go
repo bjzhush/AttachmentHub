@@ -295,6 +295,16 @@ const webAppHTML = `<!doctype html>
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .snippet-link {
+      color: #0a5aa8;
+      text-decoration: underline;
+      text-decoration-color: rgba(10, 90, 168, 0.36);
+      text-underline-offset: 2px;
+    }
+    .snippet-link:hover {
+      color: #084b8a;
+      text-decoration-color: rgba(8, 75, 138, 0.52);
+    }
     .has-overflow-tip {
       position: relative;
       cursor: default;
@@ -693,11 +703,11 @@ const webAppHTML = `<!doctype html>
           "      <div class='item-id'>" + escapeHtml(item.public_id) + "</div>" +
           "      <div class='item-name js-overflow-tip' data-full='" + escapeAttr(tooltipText(item.original_name)) + "'>" + escapeHtml(item.original_name) + "</div>" +
           "    </div>" +
-          "    <div class='item-meta'>" + escapeHtml(item.content_type) + " · " + formatSizeMB(item.file_size) + "</div>" +
+          "    <div class='item-meta'>" + escapeHtml(item.content_type) + " · " + formatSizeMB(item.file_size) + " · 上传时间：" + escapeHtml(formatUploadTime(item.created_at)) + "</div>" +
           "  </div>" +
           "  <div class='item-side'>" +
           "    <div class='item-snippet'>" +
-          "      <div class='snippet-line'><span class='snippet-label'>URL</span><span class='snippet-value js-overflow-tip' data-full='" + escapeAttr(tooltipText(item.url)) + "'>" + previewText(item.url) + "</span></div>" +
+          "      <div class='snippet-line'><span class='snippet-label'>URL</span>" + renderURLValue(item.url) + "</div>" +
           "      <div class='snippet-line'><span class='snippet-label'>Note</span><span class='snippet-value js-overflow-tip' data-full='" + escapeAttr(tooltipText(item.note)) + "'>" + previewText(item.note) + "</span></div>" +
           "    </div>" +
           "    <div class='item-actions'>" +
@@ -939,12 +949,69 @@ const webAppHTML = `<!doctype html>
       return String(value).replaceAll("\n", " ").trim();
     }
 
+    function rawText(value) {
+      if (value === null || value === undefined) {
+        return "";
+      }
+      return String(value).replaceAll("\n", " ").trim();
+    }
+
+    function sanitizeExternalURL(value) {
+      const text = rawText(value);
+      if (!text) {
+        return "";
+      }
+      if (/^https?:\/\//i.test(text)) {
+        return text;
+      }
+      return "";
+    }
+
+    function renderURLValue(value) {
+      const text = rawText(value);
+      if (!text) {
+        return "<span class='snippet-value'>-</span>";
+      }
+
+      const safeText = escapeHtml(text);
+      const fullText = escapeAttr(text);
+      const href = sanitizeExternalURL(text);
+      if (!href) {
+        return "<span class='snippet-value js-overflow-tip' data-full='" + fullText + "'>" + safeText + "</span>";
+      }
+
+      return "<a class='snippet-value snippet-link js-overflow-tip' data-full='" + fullText + "' href='" + escapeAttr(href) + "' target='_blank' rel='noopener noreferrer'>" + safeText + "</a>";
+    }
+
     function formatSizeMB(value) {
       const bytes = Number(value);
       if (!Number.isFinite(bytes) || bytes <= 0) {
         return "0.00 MB";
       }
       return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    function pad2(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function formatUploadTime(value) {
+      const text = rawText(value);
+      if (!text) {
+        return "-";
+      }
+
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) {
+        return text;
+      }
+
+      return date.getFullYear() + "-" +
+        pad2(date.getMonth() + 1) + "-" +
+        pad2(date.getDate()) + " " +
+        pad2(date.getHours()) + ":" +
+        pad2(date.getMinutes()) + ":" +
+        pad2(date.getSeconds());
     }
 
     function updateOverflowTips() {

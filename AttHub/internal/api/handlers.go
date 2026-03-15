@@ -267,7 +267,7 @@ func (h *Handler) openAttachmentByPublicID(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", item.ContentType)
+	w.Header().Set("Content-Type", resolveInlineContentType(item.FileExt, item.ContentType))
 	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", item.OriginalName))
 	http.ServeFile(w, r, path)
 }
@@ -326,6 +326,25 @@ func optionalFromForm(raw string) *string {
 		return nil
 	}
 	return &value
+}
+
+func resolveInlineContentType(fileExt string, detected string) string {
+	ext := strings.ToLower(strings.TrimSpace(fileExt))
+	switch ext {
+	case ".pdf":
+		return "application/pdf"
+	case ".html", ".htm":
+		lower := strings.ToLower(strings.TrimSpace(detected))
+		if strings.HasPrefix(lower, "text/html") || strings.HasPrefix(lower, "application/xhtml+xml") {
+			return detected
+		}
+		return "text/html; charset=utf-8"
+	default:
+		if strings.TrimSpace(detected) == "" {
+			return "application/octet-stream"
+		}
+		return detected
+	}
 }
 
 func toAttachmentResponse(item attachment.Attachment) attachmentResponse {
