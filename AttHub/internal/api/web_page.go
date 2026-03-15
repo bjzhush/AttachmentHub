@@ -436,6 +436,19 @@ const webAppHTML = `<!doctype html>
       color: #5c6f88;
       margin: 4px 0 12px;
     }
+    .modal-file {
+      font-size: 12px;
+      color: #4f647f;
+      margin: -6px 0 12px;
+      line-height: 1.45;
+      white-space: normal;
+      word-break: break-word;
+    }
+    #edit-url::placeholder,
+    #edit-note::placeholder {
+      color: #9fb0c4;
+      opacity: 1;
+    }
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -562,6 +575,7 @@ const webAppHTML = `<!doctype html>
     <div class="modal-card">
       <h3 class="modal-title" id="modal-title">编辑附件元数据</h3>
       <div id="modal-sub" class="modal-sub"></div>
+      <div id="modal-file" class="modal-file"></div>
       <input id="edit-id" type="hidden" />
       <div style="display:grid; gap:10px;">
         <label>
@@ -600,6 +614,7 @@ const webAppHTML = `<!doctype html>
     const modalCancelBtn = document.getElementById("modal-cancel");
     const modalSaveBtn = document.getElementById("modal-save");
     const modalSub = document.getElementById("modal-sub");
+    const modalFile = document.getElementById("modal-file");
     const itemStore = new Map();
     let currentPage = 1;
     let currentPageSize = 50;
@@ -751,7 +766,8 @@ const webAppHTML = `<!doctype html>
       editIDInput.value = String(item.id);
       editURLInput.value = item.url || "";
       editNoteInput.value = item.note || "";
-      modalSub.textContent = "#" + item.id + " · " + item.public_id + " · " + item.original_name;
+      modalSub.textContent = "#" + item.id + " · " + item.public_id;
+      modalFile.textContent = "文件名： " + item.original_name;
       editorModal.classList.add("show");
     }
 
@@ -761,6 +777,7 @@ const webAppHTML = `<!doctype html>
       editURLInput.value = "";
       editNoteInput.value = "";
       modalSub.textContent = "";
+      modalFile.textContent = "";
     }
 
     function setStatus(node, message, type) {
