@@ -108,6 +108,10 @@ func (h *Handler) importAttachment(w http.ResponseWriter, r *http.Request) {
 		Note:       note,
 	})
 	if err != nil {
+		if errors.Is(err, attachment.ErrDuplicateAttachment) {
+			writeJSON(w, http.StatusOK, toAttachmentResponse(created))
+			return
+		}
 		h.writeAttachmentError(w, err)
 		return
 	}
@@ -309,8 +313,6 @@ func (h *Handler) webApp(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) writeAttachmentError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, attachment.ErrDuplicateAttachment):
-		writeJSON(w, http.StatusConflict, errorResponse{Error: "file already uploaded"})
 	case errors.Is(err, attachment.ErrUnsupportedFileType):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unsupported file format, only PDF/HTML is accepted"})
 	case errors.Is(err, attachment.ErrEmptyFile):

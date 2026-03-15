@@ -2,6 +2,7 @@ package attachment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -48,6 +49,10 @@ func (s *Service) Import(ctx context.Context, input ImportInput) (Attachment, er
 	})
 	if err != nil {
 		_ = s.storage.Delete(storedFile.StoredName)
+		if errors.Is(err, ErrDuplicateAttachment) {
+			// Keep duplicate as a typed error while returning the existing record.
+			return created, ErrDuplicateAttachment
+		}
 		return Attachment{}, fmt.Errorf("save attachment metadata: %w", err)
 	}
 

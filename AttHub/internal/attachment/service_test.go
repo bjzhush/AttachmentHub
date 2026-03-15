@@ -155,12 +155,15 @@ func TestServiceRejectsDuplicateAttachmentBySHA(t *testing.T) {
 		t.Fatalf("first import failed: %v", err)
 	}
 
-	_, err = service.Import(context.Background(), ImportInput{
+	duplicate, err := service.Import(context.Background(), ImportInput{
 		FileReader: strings.NewReader(content),
 		Filename:   "second.html",
 	})
 	if !errors.Is(err, ErrDuplicateAttachment) {
 		t.Fatalf("expected ErrDuplicateAttachment, got %v", err)
+	}
+	if duplicate.ID <= 0 || len(duplicate.PublicID) != publicid.Length {
+		t.Fatalf("expected duplicate response to include existing attachment, got id=%d public_id=%q", duplicate.ID, duplicate.PublicID)
 	}
 
 	items, total, err := service.Search(context.Background(), "", "", 1, 20)
