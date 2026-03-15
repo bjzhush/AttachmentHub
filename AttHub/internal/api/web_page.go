@@ -195,6 +195,10 @@ const webAppHTML = `<!doctype html>
       gap: 10px;
       margin-bottom: 10px;
     }
+    .item-main {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
     .item-title-row {
       display: flex;
       align-items: center;
@@ -229,6 +233,9 @@ const webAppHTML = `<!doctype html>
       font-weight: 700;
       margin: 0;
       min-width: 0;
+      width: 40ch;
+      max-width: 40ch;
+      flex: 0 1 40ch;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -481,6 +488,9 @@ const webAppHTML = `<!doctype html>
         box-sizing: border-box;
       }
       .item-name {
+        width: auto;
+        max-width: 100%;
+        flex: 1 1 auto;
         white-space: normal;
       }
       .item-side {
@@ -662,13 +672,13 @@ const webAppHTML = `<!doctype html>
         card.tabIndex = 0;
         card.innerHTML =
           "<div class='item-head'>" +
-          "  <div>" +
+          "  <div class='item-main'>" +
           "    <div class='item-title-row'>" +
           "      <div class='item-seq'>#" + item.id + "</div>" +
           "      <div class='item-id'>" + escapeHtml(item.public_id) + "</div>" +
           "      <div class='item-name js-overflow-tip' data-full='" + escapeAttr(tooltipText(item.original_name)) + "'>" + escapeHtml(item.original_name) + "</div>" +
           "    </div>" +
-          "    <div class='item-meta'>" + escapeHtml(item.content_type) + " · " + item.file_size + " B</div>" +
+          "    <div class='item-meta'>" + escapeHtml(item.content_type) + " · " + formatSizeMB(item.file_size) + "</div>" +
           "  </div>" +
           "  <div class='item-side'>" +
           "    <div class='item-snippet'>" +
@@ -910,6 +920,14 @@ const webAppHTML = `<!doctype html>
         return "-";
       }
       return String(value).replaceAll("\n", " ").trim();
+    }
+
+    function formatSizeMB(value) {
+      const bytes = Number(value);
+      if (!Number.isFinite(bytes) || bytes <= 0) {
+        return "0.00 MB";
+      }
+      return (bytes / (1024 * 1024)).toFixed(2) + " MB";
     }
 
     function updateOverflowTips() {
