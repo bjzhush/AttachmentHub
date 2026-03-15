@@ -102,6 +102,33 @@ go mod tidy
 go run ./cmd/server
 ```
 
+## 服务管理（单实例）
+
+提供了一个轻量服务脚本，支持 `start/stop/restart/status/logs`，并通过 PID 文件保证同一套目录下只有一个实例在运行。
+
+```bash
+cd AttHub
+./scripts/atthub-service.sh start
+./scripts/atthub-service.sh status
+./scripts/atthub-service.sh restart
+./scripts/atthub-service.sh stop
+```
+
+也可以使用 Make 命令：
+
+```bash
+make service-start
+make service-status
+make service-restart
+make service-stop
+```
+
+说明：
+
+- 日志文件：`./.runtime/atthub.log`
+- PID 文件：`./.runtime/atthub.pid`
+- 可选读取环境变量文件：`./.env`
+
 浏览器页面：
 
 ```bash

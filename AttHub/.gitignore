@@ -1,5 +1,7 @@
 data/
 tmp/
+bin/
+.runtime/
 *.db
 *.db-shm
 *.db-wal
