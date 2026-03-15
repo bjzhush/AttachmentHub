@@ -31,18 +31,52 @@ if [[ "${2:-}" == "--once" ]]; then
   RUN_ONCE=1
 fi
 
-if [[ ! -f "${CONFIG_FILE}" ]]; then
-  echo "Config file not found: ${CONFIG_FILE}"
-  echo "Please copy ${SCRIPT_DIR}/config.env.example to ${SCRIPT_DIR}/config.env and edit it."
+escape_applescript_string() {
+  local text="${1:-}"
+  text="${text//\\/\\\\}"
+  text="${text//\"/\\\"}"
+  text="${text//$'\n'/ }"
+  printf '%s' "${text}"
+}
+
+notify_mac() {
+  local title="${1:-AttachmentHub}"
+  local subtitle="${2:-ObsidianImport}"
+  local message="${3:-}"
+  if ! command -v osascript >/dev/null 2>&1; then
+    return 0
+  fi
+  local t s m
+  t="$(escape_applescript_string "${title}")"
+  s="$(escape_applescript_string "${subtitle}")"
+  m="$(escape_applescript_string "${message}")"
+  osascript -e "display notification \"${m}\" with title \"${t}\" subtitle \"${s}\" sound name \"Glass\"" >/dev/null 2>&1 || true
+}
+
+fail_exit() {
+  local message="${1}"
+  echo "${message}"
+  notify_mac "AttachmentHub 导入错误" "ObsidianImport" "${message}"
   exit 1
+}
+
+on_unexpected_error() {
+  local exit_code=$?
+  local line_no="${1:-unknown}"
+  notify_mac "AttachmentHub 导入异常" "ObsidianImport" "脚本异常退出（line=${line_no}, exit=${exit_code}）"
+}
+
+trap 'on_unexpected_error ${LINENO}' ERR
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+  fail_exit "Config file not found: ${CONFIG_FILE}. Please copy ${SCRIPT_DIR}/config.env.example and edit it."
 fi
 
 # shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 
 if [[ -z "${API_URL:-}" ]]; then
-  echo "Missing API_URL in ${CONFIG_FILE}"
-  exit 1
+  fail_exit "Missing API_URL in ${CONFIG_FILE}"
 fi
 
 # Backward compatibility for typo from earlier notes.
@@ -51,21 +85,16 @@ if [[ -z "${SCAN_DIR:-}" && -n "${SCDN_DIR:-}" ]]; then
 fi
 
 if [[ -z "${SCAN_DIR:-}" ]]; then
-  echo "Missing SCAN_DIR in ${CONFIG_FILE}"
-  exit 1
+  fail_exit "Missing SCAN_DIR in ${CONFIG_FILE}"
 fi
 
 if [[ ! -d "${SCAN_DIR}" ]]; then
-  echo "SCAN_DIR does not exist: ${SCAN_DIR}"
-  exit 1
+  fail_exit "SCAN_DIR does not exist: ${SCAN_DIR}"
 fi
 
 API_BASE="${API_URL%/}"
 if [[ ! "${API_BASE}" =~ ^https?://[^/]+$ ]]; then
-  echo "Invalid API_URL in ${CONFIG_FILE}"
-  echo "API_URL must be domain/ip + port only, without API path."
-  echo "Example: API_URL=\"http://127.0.0.1:10001\""
-  exit 1
+  fail_exit "Invalid API_URL in ${CONFIG_FILE}. Use host:port only, for example http://127.0.0.1:10001"
 fi
 
 IMPORT_ENDPOINT="${API_BASE}/api/v1/attachments/import"
@@ -149,6 +178,7 @@ process_once() {
   cycle_total=0
   cycle_success=0
   cycle_failed=0
+  cycle_first_failure=""
 
   while IFS= read -r -d '' file; do
     cycle_total=$((cycle_total + 1))
@@ -166,7 +196,7 @@ process_once() {
       fi
     fi
 
-    response_with_code="$(curl "${upload_args[@]}" -w $'\n%{http_code}' || true)"
+    response_with_code="$(curl "${upload_args[@]}" -w $'\n%{http_code}' 2>&1 || true)"
     http_code="$(printf '%s\n' "${response_with_code}" | tail -n 1)"
     body="$(printf '%s\n' "${response_with_code}" | sed '$d')"
 
@@ -182,6 +212,9 @@ process_once() {
 
     cycle_failed=$((cycle_failed + 1))
     failed_target="$(move_to_failed "${file}")"
+    if [[ -z "${cycle_first_failure}" ]]; then
+      cycle_first_failure="$(basename "${file}") (HTTP ${http_code})"
+    fi
     echo "[FAIL] ${file} (HTTP ${http_code}) -> moved to ${failed_target}"
     if [[ -n "${body}" ]]; then
       echo "       ${body}"
@@ -202,6 +235,9 @@ while true; do
   process_once
 
   echo "Cycle result: Total=${cycle_total}, Success=${cycle_success}, Failed=${cycle_failed}"
+  if (( cycle_failed > 0 )); then
+    notify_mac "AttachmentHub 导入失败" "ObsidianImport" "本轮失败 ${cycle_failed} 个。${cycle_first_failure}"
+  fi
 
   if (( cycle_success > 0 )); then
     next_interval_sec=${MIN_INTERVAL_SEC}
