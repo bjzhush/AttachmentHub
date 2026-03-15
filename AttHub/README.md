@@ -14,8 +14,9 @@
 ## 当前实现（v1）
 
 - 导入附件：支持 `PDF/HTML` 文件 + 可选 `url` + 可选 `note`
-- 每个附件自动分配 8 位字母/数字 ID（`public_id`）
-- 搜索附件：按关键词匹配 `url` 或 `note` 子串
+- 每个附件自动分配哈希风格 ID（`public_id`，12 位十六进制）用于外部引用
+- 保留递增序号 `id` 作为内部编号
+- 搜索附件：按关键词匹配 `url` / `note`，并支持按 `stored_name` 模糊匹配
 - 更新附件：更新 `url` / `note`（空字符串会被清空为 `NULL`）
 - 删除附件：删除附件记录，并清理对应文件
 - 通过 `public_id` 直接打开附件：`GET /f/{public_id}`
@@ -45,13 +46,18 @@ curl -X POST http://localhost:8080/api/v1/attachments/import \
 
 ### 2) 搜索附件
 
-`GET /api/v1/attachments?keyword=xxx&page=1&page_size=20`
+`GET /api/v1/attachments?keyword=xxx&filename=foo&page=1&page_size=50`
+
+说明：
+
+- 无 `keyword` 和 `filename`：分页返回，每页 50 条
+- 有任一搜索条件：仅返回前 50 条，不分页
 
 ### 3) 获取单条附件
 
 `GET /api/v1/attachments/{id}`
 
-### 4) 按 8 位 ID 获取附件元数据
+### 4) 按哈希 ID 获取附件元数据
 
 `GET /api/v1/attachments/public/{public_id}`
 
@@ -80,7 +86,8 @@ curl -X POST http://localhost:8080/api/v1/attachments/import \
 
 主表 `attachments` 核心字段：
 
-- 访问 ID：`public_id`（8 位字母/数字）
+- 访问 ID：`public_id`（12 位十六进制哈希风格）
+- 内部编号：`id`（整数自增）
 - 文件信息：`original_name`, `stored_name`, `file_ext`, `content_type`, `file_size`, `sha256`
 - 元数据：`source_url`, `note`
 - 时间字段：`created_at`, `updated_at`

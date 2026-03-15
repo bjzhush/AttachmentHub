@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"atthub/internal/db"
+	"atthub/internal/publicid"
 )
 
 func TestServiceImportSearchUpdateDelete(t *testing.T) {
@@ -36,8 +37,8 @@ func TestServiceImportSearchUpdateDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import attachment: %v", err)
 	}
-	if len(created.PublicID) != 8 {
-		t.Fatalf("expected 8-char public id, got %q", created.PublicID)
+	if len(created.PublicID) != publicid.Length {
+		t.Fatalf("expected %d-char public id, got %q", publicid.Length, created.PublicID)
 	}
 
 	fetchedByPublicID, err := service.GetByPublicID(context.Background(), created.PublicID)
@@ -48,7 +49,7 @@ func TestServiceImportSearchUpdateDelete(t *testing.T) {
 		t.Fatalf("expected fetched id=%d, got %d", created.ID, fetchedByPublicID.ID)
 	}
 
-	items, total, err := service.Search(context.Background(), "sqlite", 1, 20)
+	items, total, err := service.Search(context.Background(), "sqlite", "", 1, 20)
 	if err != nil {
 		t.Fatalf("search attachment: %v", err)
 	}
@@ -57,6 +58,22 @@ func TestServiceImportSearchUpdateDelete(t *testing.T) {
 	}
 	if len(items) != 1 {
 		t.Fatalf("expected 1 search result, got %d", len(items))
+	}
+
+	itemsByFilename, totalByFilename, err := service.Search(context.Background(), "", "article", 1, 20)
+	if err != nil {
+		t.Fatalf("search by filename: %v", err)
+	}
+	if totalByFilename != 0 || len(itemsByFilename) != 0 {
+		t.Fatalf("expected original filename search not to match, total=%d len=%d", totalByFilename, len(itemsByFilename))
+	}
+
+	itemsByStoredFilename, totalByStoredFilename, err := service.Search(context.Background(), "", created.StoredName, 1, 20)
+	if err != nil {
+		t.Fatalf("search by stored filename: %v", err)
+	}
+	if totalByStoredFilename != 1 || len(itemsByStoredFilename) != 1 {
+		t.Fatalf("expected stored filename search to match 1 result, total=%d len=%d", totalByStoredFilename, len(itemsByStoredFilename))
 	}
 
 	updatedNote := "updated note"

@@ -80,33 +80,31 @@ func migratePublicID(db *sql.DB) error {
 	}
 
 	rows, err := db.Query(`
-		SELECT id
+		SELECT id, sha256, stored_name, public_id
 		FROM attachments
-		WHERE public_id IS NULL OR trim(public_id) = ''
 		ORDER BY id`)
 	if err != nil {
-		return fmt.Errorf("query rows for public id backfill: %w", err)
+		return fmt.Errorf("query rows for public id migration: %w", err)
 	}
 	defer rows.Close()
 
-	type pair struct {
-		ID       int64
-		PublicID string
+	type record struct {
+		ID         int64
+		SHA256     string
+		StoredName string
+		PublicID   sql.NullString
 	}
-	updates := make([]pair, 0, 64)
+
+	records := make([]record, 0, 64)
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return fmt.Errorf("scan row for public id backfill: %w", err)
+		var item record
+		if err := rows.Scan(&item.ID, &item.SHA256, &item.StoredName, &item.PublicID); err != nil {
+			return fmt.Errorf("scan row for public id migration: %w", err)
 		}
-		publicID, err := publicid.FromInt64(id)
-		if err != nil {
-			return fmt.Errorf("generate public id for %d: %w", id, err)
-		}
-		updates = append(updates, pair{ID: id, PublicID: publicID})
+		records = append(records, item)
 	}
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate rows for public id backfill: %w", err)
+		return fmt.Errorf("iterate rows for public id migration: %w", err)
 	}
 
 	tx, err := db.Begin()
@@ -121,9 +119,55 @@ func migratePublicID(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	for _, item := range updates {
-		if _, err := stmt.Exec(item.PublicID, item.ID); err != nil {
-			return fmt.Errorf("update public id for %d: %w", item.ID, err)
+	for _, item := range records {
+		current := ""
+		if item.PublicID.Valid {
+			current = item.PublicID.String
+		}
+
+		normalized, normalizeErr := publicid.Normalize(current)
+		if normalizeErr == nil {
+			// Keep already valid hash style IDs.
+			if normalized != current {
+				if _, err := stmt.Exec(normalized, item.ID); err != nil {
+					return fmt.Errorf("normalize public id for %d: %w", item.ID, err)
+				}
+			}
+			continue
+		}
+
+		assigned := false
+		for attempt := 0; attempt < 16; attempt++ {
+			newPublicID, err := publicid.FromAttachment(item.ID, item.SHA256, item.StoredName, attempt)
+			if err != nil {
+				return fmt.Errorf("generate public id for %d: %w", item.ID, err)
+			}
+
+			var exists int
+			if err := tx.QueryRow(`
+				SELECT COUNT(1)
+				FROM attachments
+				WHERE public_id = ? AND id <> ?`,
+				newPublicID, item.ID,
+			).Scan(&exists); err != nil {
+				return fmt.Errorf("check public id uniqueness for %d: %w", item.ID, err)
+			}
+			if exists > 0 {
+				continue
+			}
+
+			if _, err := stmt.Exec(newPublicID, item.ID); err != nil {
+				if isUniquePublicIDError(err) {
+					continue
+				}
+				return fmt.Errorf("update public id for %d: %w", item.ID, err)
+			}
+
+			assigned = true
+			break
+		}
+		if !assigned {
+			return fmt.Errorf("update public id for %d: max retries reached", item.ID)
 		}
 	}
 
@@ -166,4 +210,13 @@ func hasAttachmentColumn(db *sql.DB, column string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func isUniquePublicIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unique constraint failed") &&
+		strings.Contains(message, "attachments.public_id")
 }

@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	defaultPageSize      = 50
+	searchResultPageSize = 50
 )
 
 type Handler struct {
@@ -102,20 +102,22 @@ func (h *Handler) importAttachment(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) searchAttachments(w http.ResponseWriter, r *http.Request) {
 	keyword := strings.TrimSpace(r.URL.Query().Get("keyword"))
-	page := parseIntWithDefault(r.URL.Query().Get("page"), 1)
-	pageSize := parseIntWithDefault(r.URL.Query().Get("page_size"), defaultPageSize)
+	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
 
-	if page < 1 {
+	page := 1
+	pageSize := defaultPageSize
+	if keyword == "" && filename == "" {
+		page = parseIntWithDefault(r.URL.Query().Get("page"), 1)
+		if page < 1 {
+			page = 1
+		}
+	} else {
+		// Search mode intentionally returns only first page without pagination.
 		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = defaultPageSize
-	}
-	if pageSize > maxPageSize {
-		pageSize = maxPageSize
+		pageSize = searchResultPageSize
 	}
 
-	items, total, err := h.service.Search(r.Context(), keyword, page, pageSize)
+	items, total, err := h.service.Search(r.Context(), keyword, filename, page, pageSize)
 	if err != nil {
 		h.logger.Error("search attachments failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "search failed"})

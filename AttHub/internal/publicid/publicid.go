@@ -1,37 +1,33 @@
 package publicid
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 )
 
 const (
-	Length = 8
-	base   = 36
+	Length = 12
 )
 
 var (
-	ErrInvalidID      = errors.New("invalid public id")
-	ErrSourceTooLarge = errors.New("source id exceeds 8-char base36 range")
-	alphabet          = []byte("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	ErrInvalidID = errors.New("invalid public id")
 )
 
-func FromInt64(id int64) (string, error) {
+func FromAttachment(id int64, fileSHA string, storedName string, attempt int) (string, error) {
 	if id <= 0 {
 		return "", ErrInvalidID
 	}
 
-	var buf [Length]byte
-	for i := Length - 1; i >= 0; i-- {
-		buf[i] = alphabet[id%base]
-		id /= base
+	seed := fmt.Sprintf("%d:%s:%s:%d", id, strings.TrimSpace(fileSHA), strings.TrimSpace(storedName), attempt)
+	sum := sha256.Sum256([]byte(seed))
+	hash := strings.ToUpper(hex.EncodeToString(sum[:]))
+	if len(hash) < Length {
+		return "", ErrInvalidID
 	}
-
-	if id > 0 {
-		return "", ErrSourceTooLarge
-	}
-
-	return string(buf[:]), nil
+	return hash[:Length], nil
 }
 
 func Normalize(id string) (string, error) {
@@ -42,7 +38,7 @@ func Normalize(id string) (string, error) {
 
 	for i := 0; i < len(cleaned); i++ {
 		c := cleaned[i]
-		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')) {
 			return "", ErrInvalidID
 		}
 	}

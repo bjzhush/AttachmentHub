@@ -49,8 +49,8 @@ func (s *Service) Import(ctx context.Context, input ImportInput) (Attachment, er
 	return created, nil
 }
 
-func (s *Service) Search(ctx context.Context, keyword string, page int, pageSize int) ([]Attachment, int, error) {
-	return s.repo.Search(ctx, keyword, page, pageSize)
+func (s *Service) Search(ctx context.Context, keyword string, filename string, page int, pageSize int) ([]Attachment, int, error) {
+	return s.repo.Search(ctx, keyword, filename, page, pageSize)
 }
 
 func (s *Service) GetByID(ctx context.Context, id int64) (Attachment, error) {

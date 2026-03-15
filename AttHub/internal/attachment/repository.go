@@ -12,6 +12,8 @@ import (
 
 var ErrNotFound = errors.New("attachment not found")
 
+const maxPublicIDAttempts = 16
+
 type Repository struct {
 	db *sql.DB
 }
@@ -49,18 +51,30 @@ func (r *Repository) Create(ctx context.Context, input CreateInput) (Attachment,
 		return Attachment{}, fmt.Errorf("read inserted id: %w", err)
 	}
 
-	publicID, err := publicid.FromInt64(id)
-	if err != nil {
-		return Attachment{}, fmt.Errorf("generate public id: %w", err)
-	}
+	assigned := false
+	for attempt := 0; attempt < maxPublicIDAttempts; attempt++ {
+		publicID, err := publicid.FromAttachment(id, input.SHA256, input.StoredName, attempt)
+		if err != nil {
+			return Attachment{}, fmt.Errorf("generate public id: %w", err)
+		}
 
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE attachments
-		SET public_id = ?
-		WHERE id = ?`,
-		publicID, id,
-	); err != nil {
-		return Attachment{}, fmt.Errorf("assign public id: %w", err)
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE attachments
+			SET public_id = ?
+			WHERE id = ?`,
+			publicID, id,
+		); err != nil {
+			if isUniquePublicIDError(err) {
+				continue
+			}
+			return Attachment{}, fmt.Errorf("assign public id: %w", err)
+		}
+
+		assigned = true
+		break
+	}
+	if !assigned {
+		return Attachment{}, fmt.Errorf("assign public id: max retries reached for id=%d", id)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -109,7 +123,7 @@ func (r *Repository) GetByPublicID(ctx context.Context, publicID string) (Attach
 	return attachment, nil
 }
 
-func (r *Repository) Search(ctx context.Context, keyword string, page int, pageSize int) ([]Attachment, int, error) {
+func (r *Repository) Search(ctx context.Context, keyword string, filename string, page int, pageSize int) ([]Attachment, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -118,6 +132,7 @@ func (r *Repository) Search(ctx context.Context, keyword string, page int, pageS
 	}
 	offset := (page - 1) * pageSize
 	keyword = strings.TrimSpace(keyword)
+	filename = strings.TrimSpace(filename)
 
 	var total int
 	if err := r.db.QueryRowContext(ctx, `
@@ -127,8 +142,13 @@ func (r *Repository) Search(ctx context.Context, keyword string, page int, pageS
 			? = ''
 			OR instr(lower(COALESCE(source_url, '')), lower(?)) > 0
 			OR instr(lower(COALESCE(note, '')), lower(?)) > 0
+		)
+		AND (
+			? = ''
+			OR instr(lower(COALESCE(stored_name, '')), lower(?)) > 0
 		)`,
 		keyword, keyword, keyword,
+		filename, filename,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count attachments: %w", err)
 	}
@@ -141,9 +161,13 @@ func (r *Repository) Search(ctx context.Context, keyword string, page int, pageS
 			OR instr(lower(COALESCE(source_url, '')), lower(?)) > 0
 			OR instr(lower(COALESCE(note, '')), lower(?)) > 0
 		)
+		AND (
+			? = ''
+			OR instr(lower(COALESCE(stored_name, '')), lower(?)) > 0
+		)
 		ORDER BY updated_at DESC, id DESC
 		LIMIT ? OFFSET ?`,
-		keyword, keyword, keyword, pageSize, offset,
+		keyword, keyword, keyword, filename, filename, pageSize, offset,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("search attachments: %w", err)
@@ -257,4 +281,13 @@ func normalizeOptionalString(value *string) *string {
 	}
 
 	return &normalized
+}
+
+func isUniquePublicIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unique constraint failed") &&
+		strings.Contains(message, "attachments.public_id")
 }
