@@ -112,6 +112,34 @@ func (s *LocalStorage) ResolvePath(storedName string) string {
 	return filepath.Join(s.rootDir, storedName)
 }
 
+// Clear removes all stored files under the storage root.
+// It keeps ".gitkeep" if present.
+func (s *LocalStorage) Clear() (int64, error) {
+	if err := os.MkdirAll(s.rootDir, 0o755); err != nil {
+		return 0, fmt.Errorf("prepare storage directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(s.rootDir)
+	if err != nil {
+		return 0, fmt.Errorf("read storage directory: %w", err)
+	}
+
+	var removed int64
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == ".gitkeep" {
+			continue
+		}
+		target := filepath.Join(s.rootDir, name)
+		if err := os.RemoveAll(target); err != nil {
+			return removed, fmt.Errorf("clear storage entry %q: %w", target, err)
+		}
+		removed++
+	}
+
+	return removed, nil
+}
+
 func detectContentType(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {

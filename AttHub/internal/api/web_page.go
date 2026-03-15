@@ -420,6 +420,34 @@ const webAppHTML = `<!doctype html>
     }
     .status.error { color: #a92c3e; }
     .status.ok { color: #126a52; }
+    .center-notice {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.96);
+      z-index: 1500;
+      min-width: min(640px, calc(100vw - 36px));
+      max-width: min(860px, calc(100vw - 24px));
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid rgba(145, 28, 47, 0.52);
+      background: rgba(176, 35, 57, 0.97);
+      color: #fff;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: 0 18px 42px rgba(66, 12, 23, 0.42);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+    }
+    .center-notice.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -50%) scale(1);
+    }
     .modal {
       position: fixed;
       inset: 0;
@@ -538,6 +566,7 @@ const webAppHTML = `<!doctype html>
 <body>
   <div class="bg-orb orb-a"></div>
   <div class="bg-orb orb-b"></div>
+  <div id="center-notice" class="center-notice" role="alert" aria-live="assertive"></div>
   <div class="wrap">
     <header class="hero">
       <div class="brand">
@@ -625,11 +654,13 @@ const webAppHTML = `<!doctype html>
     const modalSaveBtn = document.getElementById("modal-save");
     const modalSub = document.getElementById("modal-sub");
     const modalFile = document.getElementById("modal-file");
+    const centerNotice = document.getElementById("center-notice");
     const itemStore = new Map();
     let currentPage = 1;
     let currentPageSize = 50;
     let currentTotal = 0;
     let searchMode = false;
+    let centerNoticeTimer = null;
 
     async function loadList(requestedPage) {
       const keyword = keywordInput.value.trim();
@@ -796,6 +827,26 @@ const webAppHTML = `<!doctype html>
         node.classList.add(type);
       }
       node.textContent = message;
+      if (type === "error" && message) {
+        showCenterNotice(message);
+      }
+    }
+
+    function showCenterNotice(message) {
+      if (!centerNotice || !message) {
+        return;
+      }
+
+      centerNotice.textContent = String(message);
+      centerNotice.classList.add("show");
+
+      if (centerNoticeTimer) {
+        window.clearTimeout(centerNoticeTimer);
+      }
+
+      centerNoticeTimer = window.setTimeout(() => {
+        centerNotice.classList.remove("show");
+      }, 4200);
     }
 
     importForm.addEventListener("submit", async (event) => {

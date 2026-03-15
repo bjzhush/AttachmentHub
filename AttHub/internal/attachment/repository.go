@@ -11,6 +11,7 @@ import (
 )
 
 var ErrNotFound = errors.New("attachment not found")
+var ErrDuplicateAttachment = errors.New("duplicate attachment")
 
 const maxPublicIDAttempts = 16
 
@@ -23,6 +24,14 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) Create(ctx context.Context, input CreateInput) (Attachment, error) {
+	existing, err := r.getBySHA256(ctx, input.SHA256)
+	if err == nil {
+		return existing, ErrDuplicateAttachment
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return Attachment{}, fmt.Errorf("check duplicate attachment: %w", err)
+	}
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("begin create transaction: %w", err)
@@ -226,6 +235,53 @@ func (r *Repository) Delete(ctx context.Context, id int64) (Attachment, error) {
 
 	if _, err := r.db.ExecContext(ctx, "DELETE FROM attachments WHERE id = ?", id); err != nil {
 		return Attachment{}, fmt.Errorf("delete attachment record: %w", err)
+	}
+
+	return item, nil
+}
+
+func (r *Repository) ResetAll(ctx context.Context) (int64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin reset transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, "DELETE FROM attachments")
+	if err != nil {
+		return 0, fmt.Errorf("delete attachments: %w", err)
+	}
+
+	// Reset autoincrement sequence for a clean dev-reset behavior.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sqlite_sequence WHERE name = 'attachments'"); err != nil {
+		return 0, fmt.Errorf("reset attachments sequence: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit reset transaction: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read reset affected rows: %w", err)
+	}
+
+	return affected, nil
+}
+
+func (r *Repository) getBySHA256(ctx context.Context, sha256 string) (Attachment, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, public_id, original_name, stored_name, file_ext, content_type, file_size, sha256, source_url, note, created_at, updated_at
+		FROM attachments
+		WHERE sha256 = ?
+		LIMIT 1`, strings.TrimSpace(sha256))
+
+	item, err := scanAttachment(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Attachment{}, ErrNotFound
+		}
+		return Attachment{}, fmt.Errorf("get attachment by sha256: %w", err)
 	}
 
 	return item, nil

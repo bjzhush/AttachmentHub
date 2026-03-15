@@ -130,3 +130,52 @@ func TestServiceRejectsUnsupportedFileType(t *testing.T) {
 		t.Fatalf("expected ErrUnsupportedFileType, got %v", err)
 	}
 }
+
+func TestServiceRejectsDuplicateAttachmentBySHA(t *testing.T) {
+	tempDir := t.TempDir()
+	sqliteDB, err := db.OpenSQLite(filepath.Join(tempDir, "test.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqliteDB.Close()
+	})
+
+	repo := NewRepository(sqliteDB)
+	filesDir := filepath.Join(tempDir, "files")
+	storage := NewLocalStorage(filesDir)
+	service := NewService(repo, storage)
+
+	content := "<html><body>same content</body></html>"
+	_, err = service.Import(context.Background(), ImportInput{
+		FileReader: strings.NewReader(content),
+		Filename:   "first.html",
+	})
+	if err != nil {
+		t.Fatalf("first import failed: %v", err)
+	}
+
+	_, err = service.Import(context.Background(), ImportInput{
+		FileReader: strings.NewReader(content),
+		Filename:   "second.html",
+	})
+	if !errors.Is(err, ErrDuplicateAttachment) {
+		t.Fatalf("expected ErrDuplicateAttachment, got %v", err)
+	}
+
+	items, total, err := service.Search(context.Background(), "", "", 1, 20)
+	if err != nil {
+		t.Fatalf("search after duplicate import: %v", err)
+	}
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("expected exactly 1 record, total=%d len=%d", total, len(items))
+	}
+
+	entries, err := os.ReadDir(filesDir)
+	if err != nil {
+		t.Fatalf("read storage dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 stored file after duplicate rejected, got %d", len(entries))
+	}
+}

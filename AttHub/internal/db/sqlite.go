@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_updated_at ON attachments(updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_attachments_source_url ON attachments(source_url);
 CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note);
+CREATE INDEX IF NOT EXISTS idx_attachments_sha256 ON attachments(sha256);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_attachments_public_id ON attachments(public_id);
 `
 

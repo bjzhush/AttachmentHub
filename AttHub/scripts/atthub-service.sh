@@ -11,7 +11,7 @@ LOG_FILE="${RUNTIME_DIR}/atthub.log"
 ENV_FILE="${APP_DIR}/.env"
 
 usage() {
-	echo "Usage: $(basename "$0") {start|stop|restart|status|logs}"
+	echo "Usage: $(basename "$0") {start|stop|restart|status|logs|reset}"
 }
 
 ensure_dirs() {
@@ -147,6 +147,55 @@ logs_service() {
 	tail -f "${LOG_FILE}"
 }
 
+confirm_reset() {
+	echo "This will delete ALL local attachments and sqlite data for the current config."
+	echo "Storage: ${ATTHUB_STORAGE_DIR:-./attachments}"
+	echo "Database: ${ATTHUB_DB_PATH:-./data/attachmenthub.db}"
+	read -r -p "Continue reset? [yes/No] " answer
+	[[ "${answer}" == "yes" ]]
+}
+
+reset_service() {
+	ensure_dirs
+	load_env
+
+	if ! confirm_reset; then
+		echo "Reset cancelled."
+		return 0
+	fi
+
+	if is_running; then
+		local port endpoint response_with_code http_code body
+		port="${ATTHUB_PORT:-10001}"
+		endpoint="http://127.0.0.1:${port}/api/v1/admin/reset"
+		echo "Service is running, resetting via API: ${endpoint}"
+
+		response_with_code="$(
+			curl -sS -X POST "${endpoint}" -w $'\n%{http_code}' || true
+		)"
+		http_code="$(printf '%s\n' "${response_with_code}" | tail -n 1)"
+		body="$(printf '%s\n' "${response_with_code}" | sed '$d')"
+
+		if [[ "${http_code}" != "200" ]]; then
+			echo "Reset failed via API (HTTP ${http_code})."
+			if [[ -n "${body}" ]]; then
+				echo "${body}"
+			fi
+			echo "Tip: if API endpoint is missing, restart service once to load latest code."
+			return 1
+		fi
+
+		echo "Reset response: ${body}"
+	else
+		(
+			cd "${APP_DIR}"
+			go run ./cmd/devreset --yes
+		)
+	fi
+
+	echo "Reset completed."
+}
+
 cmd="${1:-}"
 case "${cmd}" in
 start)
@@ -164,6 +213,9 @@ status)
 	;;
 logs)
 	logs_service
+	;;
+reset)
+	reset_service
 	;;
 *)
 	usage

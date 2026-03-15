@@ -12,3 +12,9 @@
 ```bash
 ./scripts/atthub-service.sh start|stop|restart|status|logs
 ```
+
+开发测试时如果需要清空 SQLite + 附件目录，可在 `AttHub` 目录执行：
+
+```bash
+make reset-dev
+```

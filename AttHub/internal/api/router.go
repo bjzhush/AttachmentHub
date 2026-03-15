@@ -36,6 +36,7 @@ func NewRouter(service *attachment.Service, cfg config.Config, logger *slog.Logg
 		apiRouter.Get("/attachments/public/{publicID}", handler.getAttachmentByPublicID)
 		apiRouter.Patch("/attachments/{id}", handler.patchAttachment)
 		apiRouter.Delete("/attachments/{id}", handler.deleteAttachment)
+		apiRouter.Post("/admin/reset", handler.resetAllData)
 	})
 
 	return r

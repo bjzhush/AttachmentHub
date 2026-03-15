@@ -61,6 +61,12 @@ type patchPayload struct {
 	Note *string `json:"note"`
 }
 
+type resetResponse struct {
+	Status             string `json:"status"`
+	DeletedAttachments int64  `json:"deleted_attachments"`
+	RemovedFiles       int64  `json:"removed_files"`
+}
+
 func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -240,6 +246,21 @@ func (h *Handler) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) resetAllData(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ResetAll(r.Context())
+	if err != nil {
+		h.logger.Error("reset all data failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to reset data"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resetResponse{
+		Status:             "ok",
+		DeletedAttachments: result.DeletedAttachments,
+		RemovedFiles:       result.RemovedFiles,
+	})
+}
+
 func (h *Handler) openAttachmentByPublicID(w http.ResponseWriter, r *http.Request) {
 	publicID, ok := parsePublicIDParam(w, r, "publicID")
 	if !ok {
@@ -279,6 +300,8 @@ func (h *Handler) webApp(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) writeAttachmentError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, attachment.ErrDuplicateAttachment):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "file already uploaded"})
 	case errors.Is(err, attachment.ErrUnsupportedFileType):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unsupported file format, only PDF/HTML is accepted"})
 	case errors.Is(err, attachment.ErrEmptyFile):

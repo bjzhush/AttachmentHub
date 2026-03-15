@@ -104,7 +104,7 @@ go run ./cmd/server
 
 ## 服务管理（单实例）
 
-提供了一个轻量服务脚本，支持 `start/stop/restart/status/logs`，并通过 PID 文件保证同一套目录下只有一个实例在运行。
+提供了一个轻量服务脚本，支持 `start/stop/restart/status/logs/reset`，并通过 PID 文件保证同一套目录下只有一个实例在运行。
 
 ```bash
 cd AttHub
@@ -112,6 +112,7 @@ cd AttHub
 ./scripts/atthub-service.sh status
 ./scripts/atthub-service.sh restart
 ./scripts/atthub-service.sh stop
+./scripts/atthub-service.sh reset
 ```
 
 也可以使用 Make 命令：
@@ -121,6 +122,7 @@ make service-start
 make service-status
 make service-restart
 make service-stop
+make service-reset
 ```
 
 说明：
@@ -128,6 +130,9 @@ make service-stop
 - 日志文件：`./.runtime/atthub.log`
 - PID 文件：`./.runtime/atthub.pid`
 - 可选读取环境变量文件：`./.env`
+- `reset` 会先弹出确认（输入 `yes` 才会执行）
+- 如果服务正在运行，`reset` 会调用本地 API 直接清空数据（不停止服务）
+- 如果服务未运行，`reset` 会走离线清理逻辑（等价于 `go run ./cmd/devreset --yes`）
 
 浏览器页面：
 
@@ -140,6 +145,18 @@ open http://localhost:10001/web/attachments
 ```bash
 make reset-dev
 ```
+
+也可以直接执行底层命令：
+
+```bash
+go run ./cmd/devreset --yes
+```
+
+说明：
+
+- 会清空并重建 `ATTHUB_STORAGE_DIR`（默认 `./attachments`）
+- 会删除并重建 `ATTHUB_DB_PATH`（默认 `./data/attachmenthub.db`，以及对应 `-wal/-shm` 文件）
+- 仅建议在开发/测试环境使用
 
 默认配置（可通过环境变量覆盖）：
 

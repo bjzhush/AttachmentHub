@@ -21,3 +21,6 @@ service-status:
 
 service-logs:
 	./scripts/atthub-service.sh logs
+
+service-reset:
+	./scripts/atthub-service.sh reset

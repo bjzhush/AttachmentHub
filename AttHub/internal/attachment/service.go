@@ -25,6 +25,11 @@ type ImportInput struct {
 	Note       *string
 }
 
+type ResetResult struct {
+	DeletedAttachments int64
+	RemovedFiles       int64
+}
+
 func (s *Service) Import(ctx context.Context, input ImportInput) (Attachment, error) {
 	storedFile, err := s.storage.Save(input.FileReader, input.Filename)
 	if err != nil {
@@ -82,4 +87,21 @@ func (s *Service) ResolveFileByPublicID(ctx context.Context, publicID string) (A
 		return Attachment{}, "", err
 	}
 	return item, s.storage.ResolvePath(item.StoredName), nil
+}
+
+func (s *Service) ResetAll(ctx context.Context) (ResetResult, error) {
+	deletedAttachments, err := s.repo.ResetAll(ctx)
+	if err != nil {
+		return ResetResult{}, err
+	}
+
+	removedFiles, err := s.storage.Clear()
+	if err != nil {
+		return ResetResult{}, err
+	}
+
+	return ResetResult{
+		DeletedAttachments: deletedAttachments,
+		RemovedFiles:       removedFiles,
+	}, nil
 }
