@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	defaultPort        = "8080"
+	defaultPort        = "10001"
 	defaultDBPath      = "./data/attachmenthub.db"
 	defaultStorageDir  = "./attachments"
 	defaultMaxUploadMB = 100

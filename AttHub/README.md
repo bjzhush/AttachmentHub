@@ -38,7 +38,7 @@
 示例：
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/attachments/import \
+curl -X POST http://localhost:10001/api/v1/attachments/import \
   -F "file=@/path/to/file.pdf" \
   -F "url=https://example.com/article" \
   -F "note=离线备份"
@@ -132,7 +132,7 @@ make service-stop
 浏览器页面：
 
 ```bash
-open http://localhost:8080/web/attachments
+open http://localhost:10001/web/attachments
 ```
 
 开发期一键清空测试数据（SQLite + 附件目录）：
@@ -143,7 +143,7 @@ make reset-dev
 
 默认配置（可通过环境变量覆盖）：
 
-- `ATTHUB_PORT=8080`
+- `ATTHUB_PORT=10001`
 - `ATTHUB_DB_PATH=./data/attachmenthub.db`
 - `ATTHUB_STORAGE_DIR=./attachments`
 - `ATTHUB_MAX_UPLOAD_MB=100`
